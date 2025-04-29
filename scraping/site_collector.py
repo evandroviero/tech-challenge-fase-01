@@ -1,19 +1,37 @@
 import json
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 
 def fetch_page(url: str) -> BeautifulSoup:
-    """Sends an HTTP request and returns the parsed HTML content."""
+    """
+    Sends an HTTP request to the specified URL and returns the parsed HTML page.
+
+    Parameters:
+    - url (str): The URL to fetch the page from.
+
+    Returns:
+    - BeautifulSoup: A BeautifulSoup object representing the parsed HTML page.
+
+    Raises:
+    - HTTPError: If the HTTP request fails (non-200 status code).
+    """
     response = requests.get(url)
     response.raise_for_status()
     return BeautifulSoup(response.content, 'html.parser')
 
 
-def extract_table_data(soup: BeautifulSoup) -> pd.DataFrame:
-    """Extracts data from the HTML table and returns a cleaned DataFrame."""
+def extract_table_data(soup: BeautifulSoup) -> List[List[str]]:
+    """
+    Extracts raw tabular data from an HTML table within the parsed page.
+
+    Parameters:
+    - soup (BeautifulSoup): Parsed HTML page from which to extract the table.
+
+    Returns:
+    - List[List[str]]: A list of rows, where each row is a list of cell values as strings.
+    """
     table = soup.find('table', class_='tb_base tb_dados')
     rows = table.find_all("tr")
 
@@ -22,53 +40,94 @@ def extract_table_data(soup: BeautifulSoup) -> pd.DataFrame:
         cells = row.find_all(["th", "td"])
         cells_text = [cell.get_text(strip=True) for cell in cells]
         data.append(cells_text)
-
-    df = pd.DataFrame(data[1:], columns=data[0])
-    df["Quantidade (L.)"] = df["Quantidade (L.)"].replace("-", None)
-    df["Quantidade (L.)"] = (
-        df["Quantidade (L.)"]
-        .str.replace(".", "", regex=False)
-        .astype(float)
-        .fillna(0)
-        .astype(int)
-    )
-    return df
+    return data
 
 
-def is_all_upper(text: str) -> bool:
-    """Checks if the text is in all uppercase letters."""
-    return text == text.upper()
+def organize_data(data: List[List[str]]) -> Dict[str, List[str]]:
+    """
+    Organizes the extracted table data into a structured dictionary.
+
+    Parameters:
+    - data (List[List[str]]): A list of table rows, where the first row is assumed to be the header.
+
+    Returns:
+    - Dict[str, List[str]]: A dictionary with column names as keys and lists of column values.
+    """
+    result: Dict[str, List[str]] = {}
+    header = [col.strip() for col in data[0]]
+    result = {col: [] for col in header}
+
+    for row in data[1:]:
+        if len(row) == len(header):
+            for i, col in enumerate(header):
+                result[col].append(row[i])
+    return result
 
 
-def organize_data(df: pd.DataFrame) -> Dict[str, Dict[str, int]]:
-    """Organizes DataFrame data into a hierarchical dictionary."""
-    result: Dict[str, Dict[str, int]] = {}
-    current_key = None
+def update_url(option: str, suboption: str = None, year: int = 2023) -> str:
+    """
+    Constructs a URL for data collection based on the provided parameters.
 
-    for _, row in df.iterrows():
-        product = row["Produto"]
-        quantity = row["Quantidade (L.)"]
+    Parameters:
+    - option (str): The main category option ("02", "03", "04", "05", "06").
+    - suboption (str, optional): Subcategory option, required for options "03", "05", and "06".
+    - year (int, optional): Year of data to fetch. Default is 2023.
 
-        if is_all_upper(product):
-            current_key = product
-            result[current_key] = {}
-        elif current_key:
-            result[current_key][product] = quantity
-    json_result = json.dumps(result, ensure_ascii=False, indent=4)
-    return json_result
+    Returns:
+    - str: A formatted URL for the requested data.
 
+    Raises:
+    - ValueError: If the option is invalid, or if a required suboption is missing or invalid.
+    """
+    base_url = "http://vitibrasil.cnpuv.embrapa.br/index.php"
 
-def main(year: int = 2023, option: str = "02") -> Dict[str, Any]:
-    """Main function to orchestrate the data collection."""
-    if year < 1970 or year > 2023:
-        raise ValueError("Invalid year. The valid period is between 1970 and 2024.")
-    url = f"http://vitibrasil.cnpuv.embrapa.br/index.php?ano={year}&opcao=opt_{option}"
+    valid_suboptions = {
+        "03" : {
+            "VINIFERAS": "01",
+            "AMERICANAS E HIBRIDAS": "02",
+            "UVAS DE MESA": "03",
+            "SEM CLASSIFICACAO": "04"
+        },
+        "05": {
+            "VINHOS DE MESA": "01",
+            "ESPUMANTES": "02",
+            "UVAS FRESCAS": "03",
+            "UVAS PASSAS": "04",
+            "SUCO DE UVA": "05"
+        },
+        "06": {
+            "VINHOS DE MESA": "01",
+            "ESPUMANTES": "02",
+            "UVAS FRESCAS": "03",
+            "SUCO DE UVA": "05"
+        }
+    }
+    if option in ["02", "04"]:
+        return f"{base_url}?ano={year}&opcao=opt_{option}"
+    suboption_url = valid_suboptions.get(option).get(suboption)
+    return f"{base_url}?ano={year}&opcao=opt_{option}&subopcao=subopt_{suboption_url}"
+
+def get_infos(year: int, option: str = "02", suboption: str = None) -> Dict[str, Any]:
+    """
+    Orchestrates the full data collection process.
+
+    This function validates input parameters, constructs the data URL, fetches the web page,
+    extracts and processes the data, and returns it in a structured format.
+
+    Parameters:
+    - year (int, optional): The target year for data collection (1970 to 2024). Default is 2023.
+    - option (str, optional): The main data category option. Default is "02".
+    - suboption (str, optional): A required subcategory for some options ("03", "05", "06").
+
+    Returns:
+    - Dict[str, Any]: Structured data organized in a dictionary format.
+
+    Raises:
+    - ValueError: If the year is out of range or suboption is missing when required.
+    """
+    
+    url = update_url(option, suboption, year)
     soup = fetch_page(url)
-    df = extract_table_data(soup)
-    structured_data = organize_data(df)
+    table_data = extract_table_data(soup)
+    structured_data = organize_data(table_data)
     return structured_data
-
-
-if __name__ == "__main__":
-    data = main()
-    print(data)
