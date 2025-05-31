@@ -13,19 +13,27 @@ Este projeto consiste em uma REST API desenvolvida com **FastAPI** que realiza a
 ```bash
 .
 ├── core/
-│   └── security.py              # Lógica de autenticação e geração de tokens JWT
+│   └── security.py               # Implementação da lógica de autenticação e geração de tokens JWT
 ├── data/
-│   └── users.py                 # Lista de usuários autorizados, carregados do .env
+│   └── users.py                  # Lista de usuários autorizados, carregados a partir do arquivo .env
+├── datasets/
+│   └── *.csv                    # Arquivos CSV de backup usados como fallback em caso de erro 500 na API
+├── docs/
+│   └── *.pdf                    # Documentação em PDF das solicitações e especificações do projeto
+├── image/
+│   └── architecture_diagram.png # Diagrama de arquitetura do sistema
 ├── models/
-│   └── item.py                  # Modelos de dados usados na API
+│   └── item.py                   # Definição dos modelos de dados utilizados pela API
 ├── routes/
-│   ├── auth.py                  # Endpoints de autenticação (login, token)
-│   └── items.py                 # Endpoints de consulta de dados
+│   ├── auth.py                   # Endpoints de autenticação (login, geração de tokens)
+│   └── items.py                  # Endpoints para consulta e manipulação de dados
 ├── scrapping/
-│   └── site_collector.py        # Função de scraping para coletar dados da Embrapa
-├── main.py                      # Inicialização da aplicação FastAPI
-├── .env                         # Variáveis de ambiente (não subir para o Git!)
-└── README.md
+│   ├── site_collector.py         # Módulo responsável pelo scraping dos dados do site Embrapa
+│   └── fallback.py               # Implementação do fallback para retornar dados CSV em caso de erro 500
+├── main.py                       # Ponto de entrada e inicialização da aplicação FastAPI
+├── .env                          # Variáveis de ambiente (não versionar)
+└── README.md                     # Documentação principal do projeto
+
 ```
 
 ---
@@ -41,6 +49,7 @@ Este projeto consiste em uma REST API desenvolvida com **FastAPI** que realiza a
 - [python-jose](https://python-jose.readthedocs.io/) (JWT)
 - [python-multipart](https://andrew-d.github.io/python-multipart/)
 - [python-dotenv](https://pypi.org/project/python-dotenv/)
+- [pandas](https://pandas.pydata.org)
 
 Gerenciador de dependências: **[Poetry](https://python-poetry.org/)**
 
@@ -115,7 +124,7 @@ POST /login
 
 ## 🧭 Diagrama de Arquitetura
 
-![Diagrama de Arquitetura]()
+![Diagrama de Arquitetura](image/diagrama.png)
 
 ---
 
