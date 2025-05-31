@@ -1,10 +1,12 @@
 import json
+import re
 import requests
+from requests.exceptions import HTTPError, RequestException
 from bs4 import BeautifulSoup
 from typing import Dict, Any, List
+from scraping.fallback import CSVReader
 
-
-def fetch_page(url: str) -> BeautifulSoup:
+def fetch_page(url: str):
     """
     Sends an HTTP request to the specified URL and returns the parsed HTML page.
 
@@ -12,21 +14,32 @@ def fetch_page(url: str) -> BeautifulSoup:
     - url (str): The URL to fetch the page from.
 
     Returns:
-    - BeautifulSoup: A BeautifulSoup object representing the parsed HTML page.
+    - BeautifulSoup or dict: The parsed HTML page or fallback data from CSV.
 
     Raises:
-    - HTTPError: If the HTTP request fails (non-200 status code).
+    - HTTPError: If the HTTP request fails with status codes other than 500.
     """
-    response = requests.get(url)
-    response.raise_for_status()
-    return BeautifulSoup(response.content, 'html.parser')
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return BeautifulSoup(response.content, 'html.parser')
+
+    except HTTPError as http_err:
+        if response.status_code == 500:
+            print("Server error (500) encountered. Loading fallback data from CSV.")
+            return CSVReader().read_file(url)
+        else:
+            raise http_err
+        
+    except RequestException as req_err:
+        return CSVReader().read_file(url)
 
 
 def extract_table_data(soup: BeautifulSoup) -> List[List[str]]:
     """
     Extracts raw tabular data from an HTML table within the parsed page.
 
-    Parameters:
+    Parameters:ß
     - soup (BeautifulSoup): Parsed HTML page from which to extract the table.
 
     Returns:
@@ -128,6 +141,7 @@ def get_infos(year: int, option: str = "02", suboption: str = None) -> Dict[str,
     
     url = update_url(option, suboption, year)
     soup = fetch_page(url)
+    print(url)
     table_data = extract_table_data(soup)
     structured_data = organize_data(table_data)
     return structured_data
